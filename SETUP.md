@@ -1,66 +1,69 @@
-# Gurubara Construction App — PIN-only Firebase setup
+# Gurubara Construction App — Owner-only password login
 
-Project: `gurubaraexpense` · Region: `asia-south1`
+Firebase project: `gurubaraexpense`  
+Functions region: `asia-south1`  
+Website hosting: Vercel (standalone HTML; WordPress is not required)
 
-## What this update changes
-- Replaces email/password login with an individual **4-digit PIN**.
-- Every person has a separate Firebase Authentication identity (custom-token sign-in), so entries are attributed to the actual user UID.
-- Owner creates staff users and assigns permissions from the app.
-- Supervisor: exactly one site (Polachery OR Kundrathur).
-- Accountant: both sites and weekly payments.
-- Owner: both sites, dashboard, payments and user management.
-- PIN lookup/verifier data is server-only in `pinCredentials`; the browser never reads it.
-- PINs are HMAC-indexed and salted scrypt hashes; backend checks PINs and limits repeated login attempts.
-- Owner can disable/enable staff accounts.
+## Login behavior
 
-## Important before deployment
-The configured PINs are 4 digits as requested. Owner and accountant have separate PINs. Both supervisors share one PIN; choose the assigned site on the login screen. This allows separate site profiles but cannot prove which person physically entered the PIN. Four-digit PINs are weaker than six-digit PINs. Never put PINs or setup secrets into `index.html`, GitHub, or Vercel environment variables. This app has not been deployed to your Firebase/Vercel accounts by this package operation.
+- Only the **owner** can sign in.
+- Initial owner password: **978666**.
+- After signing in, open **Change owner password** to set a new password.
+- Supervisors and accountant do not have separate logins in this version. The owner operates the app and records both sites' information.
+- Owner can access Polachery and Kundrathur.
+- Passwords are verified by Firebase Cloud Functions and stored as salted password hashes. The password is not stored in the HTML or Firestore as plain text.
 
-## One-time Firebase setup
-1. Open Firebase Console → project `gurubaraexpense`.
-2. Confirm Firestore Database exists and Authentication is enabled. The app uses Firebase custom-token authentication; no email/password provider is needed.
-3. Install Node.js 20 and Firebase CLI on your computer:
+## Important: deploying the app
+
+Uploading the website to Vercel alone does not deploy Firebase Functions or Firestore rules. The login will not work until the Firebase backend and rules are deployed and the owner has been created/reset.
+
+### 1. Prepare Firebase
+
+1. Open Firebase Console and select project `gurubaraexpense`.
+2. Confirm Firestore Database exists.
+3. Install Node.js 20 and Firebase CLI if not already installed:
    ```bash
    npm install -g firebase-tools
    firebase login
    ```
-4. Open a terminal in this project folder and set two backend secrets. Use long random values, not any staff PIN:
+4. Open a terminal in this project folder. Confirm `.firebaserc` points to `gurubaraexpense`.
+5. Set backend secrets (use private random values; never publish them):
    ```bash
    firebase functions:secrets:set PIN_PEPPER
    firebase functions:secrets:set OWNER_BOOTSTRAP_SECRET
    ```
-   Save the `OWNER_BOOTSTRAP_SECRET` privately; you will enter it once on the temporary bootstrap page. Never share it with staff.
-5. Install and deploy backend functions plus Firestore rules:
+   Save the `OWNER_BOOTSTRAP_SECRET` privately. You must enter it in the temporary owner setup page.
+6. Deploy the backend and Firestore security rules:
    ```bash
    cd functions
    npm install
    cd ..
    firebase deploy --only functions,firestore:rules
    ```
-   Cloud Functions deployment may require the Firebase project to be on the Blaze billing plan. Review Firebase's current billing requirements before deploying.
-6. Temporarily host `bootstrap.html` and open `/bootstrap.html`. Enter the owner's display name, a new unique 6-digit owner PIN, and the one-time `OWNER_BOOTSTRAP_SECRET`.
-7. After the page confirms owner creation, **delete `bootstrap.html` from the deployed website and project**. The bootstrap function also refuses to create a second owner.
-8. Deploy `index.html` as the Vercel website root (Framework preset: Other; Build command blank; Output directory `.`). Keep `functions/`, `firestore.rules`, and `firebase.json` in your local project for future backend maintenance; do not expose `functions` source as public website content.
-9. Open the website and sign in with the owner's PIN. In User management, create the accountant account using the accountant PIN. Create two supervisor accounts: one assigned to Polachery and one assigned to Kundrathur. Use the same supervisor PIN for both. The supervisors must choose their own site on the login screen.
+   Cloud Functions deployment may require Firebase's Blaze billing plan. Review billing before enabling it.
 
-## Vercel upload
-- Extract the project ZIP.
-- For Vercel, import the extracted `gurubara_firebase_app` folder as the project root. Set Framework Preset to **Other**, Build Command empty, Output Directory `.`.
-- Before final production deployment, remove `bootstrap.html` after the owner is created.
-- Deploy the Firebase backend and rules separately with the Firebase CLI commands above. Uploading to Vercel alone does not configure Firebase Functions or Firestore rules.
+### 2. Create or reset the owner password
 
-## Collections
-- `users`: non-secret role/site profile and display name.
-- `pinCredentials`: backend-only PIN lookup hash and salted verifier.
-- `pinLoginLimits`: backend-only login throttling state.
-- `attendance`, `materials`, `subcontractorStages`, `payments`, `expenses`: shared business records with `siteId`, `createdBy`, and timestamps.
+1. Temporarily deploy the project website including `bootstrap.html`.
+2. Open `https://YOUR-VERCEL-DOMAIN/bootstrap.html`.
+3. Enter the owner display name, the initial password `978666`, and the `OWNER_BOOTSTRAP_SECRET` created above.
+4. The page creates the owner if no owner exists. If an owner already exists, it securely resets that owner's password using the setup secret.
+5. After success, remove `bootstrap.html` from the website/project and redeploy. Do not leave the bootstrap page public.
+
+### 3. Deploy the main app to Vercel
+
+1. Import the `gurubara_firebase_app` folder into Vercel as a project.
+2. Framework Preset: **Other**.
+3. Build Command: leave blank.
+4. Output Directory: `.`.
+5. Deploy `index.html` as the website home page.
+6. Open the website and sign in with the owner password `978666` (unless changed in bootstrap setup).
+7. Use **Change owner password** in the app to change it. Keep the new password private.
+
+## Security and staff access
+
+This build intentionally disables supervisor/accountant PIN login. Firestore rules allow only the authenticated owner to access app records. If staff need to enter data from their own phones, this owner-only configuration must be changed to individual staff identities and site-based permissions; do not share the owner's password.
 
 ## Existing data
-This package uses the collections above. Records stored by the older app in `daily_expenses` / `daily_attendance` are not automatically migrated. Keep a backup before replacing the old deployment; ask for a migration if you need those records carried forward.
 
-## Requested PIN assignment
-- Owner: `0000` (set on the one-time bootstrap page).
-- Accountant: `1111` (create the accountant account from Owner → User management).
-- Supervisor: `9786` (create two separate supervisor profiles, one per site, using this same PIN).
-
-Security note: because both supervisors share `9786`, the selected site determines the profile, but the system cannot reliably distinguish the two people if they share the PIN. Use separate PINs if individual accountability is required.
+This build uses the collections `attendance`, `materials`, `subcontractorStages`, `payments`, and `expenses`. Older collections such as `daily_expenses` and `daily_attendance` are not automatically migrated. Back up existing data before changing production rules or replacing the live site.
