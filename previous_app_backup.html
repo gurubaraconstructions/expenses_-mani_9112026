@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GURUBARA CONSTRUCTIONS - Attendance & Expenses</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brandOrange: '#FF6B00',
+            brandOrangeHover: '#E56000',
+            navyDark: '#0F172A',
+            navyCard: '#1E293B',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #FFFFFF;
+      color: #0F172A;
+      font-family: 'Inter', sans-serif;
+    }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  
+    /* Desktop layout enhancement: mobile layout remains unchanged */
+    @media (min-width: 1100px) {
+      body {
+        background: #F3F6FA;
+        padding: 30px 36px !important;
+        align-items: flex-start;
+      }
+      .app-shell {
+        width: min(100%, 1500px) !important;
+        margin: 0 auto;
+        gap: 22px !important;
+      }
+      header {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 24px;
+        padding: 22px 26px !important;
+        box-shadow: 0 8px 28px rgba(15, 23, 42, .045);
+      }
+      header h1 {
+        font-size: 25px !important;
+      }
+      header p {
+        font-size: 13px !important;
+      }
+      #globalSiteFilter {
+        min-width: 230px;
+        padding: 11px 14px !important;
+        font-size: 13px !important;
+      }
+      .app-shell > .grid.grid-cols-3 {
+        max-width: 620px;
+        padding: 7px !important;
+        gap: 8px !important;
+      }
+      .app-shell > .grid.grid-cols-3 button {
+        min-height: 48px;
+        font-size: 14px !important;
+      }
+      #tabExpenses,
+      #tabAttendance {
+        display: grid;
+        grid-template-columns: minmax(420px, .92fr) minmax(480px, 1.08fr);
+        grid-template-rows: auto 1fr;
+        gap: 20px !important;
+        align-items: start;
+      }
+      #tabExpenses > section:first-child,
+      #tabAttendance > section:first-child {
+        grid-column: 1 / -1;
+      }
+      #tabExpenses > section:nth-child(2),
+      #tabAttendance > section:nth-child(2) {
+        grid-column: 1;
+        grid-row: 2;
+        position: sticky;
+        top: 20px;
+      }
+      #tabExpenses > section:nth-child(3),
+      #tabAttendance > section:nth-child(3) {
+        grid-column: 2;
+        grid-row: 2;
+        min-width: 0;
+      }
+      #tabExpenses > section:first-child > div,
+      #tabAttendance > section:first-child > div {
+        min-height: 112px;
+        padding: 22px !important;
+      }
+      #tabExpenses > section:nth-child(2),
+      #tabAttendance > section:nth-child(2),
+      #tabExpenses > section:nth-child(3) > div,
+      #tabAttendance > section:nth-child(3) > div {
+        border-radius: 22px !important;
+      }
+      #tabExpenses input,
+      #tabExpenses select,
+      #tabAttendance input,
+      #tabAttendance select {
+        font-size: 14px !important;
+        min-height: 42px;
+      }
+      #tabExpenses button[type="submit"],
+      #tabAttendance button[type="submit"] {
+        min-height: 48px;
+        font-size: 14px !important;
+      }
+      #tabSites {
+        width: min(100%, 1050px);
+        margin: 0 auto;
+      }
+      #tabSites > section {
+        padding: 28px !important;
+        border-radius: 24px !important;
+      }
+      #managedSitesList {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      #managedSitesList > div {
+        min-height: 68px;
+      }
+    }
+
+    @media (min-width: 1600px) {
+      .app-shell { width: min(100%, 1600px) !important; }
+      #tabExpenses, #tabAttendance {
+        grid-template-columns: minmax(480px, .85fr) minmax(600px, 1.15fr);
+      }
+    }
+
+  </style>
+
+  <!-- LOCAL-FIRST DATABASE + FIREBASE GOOGLE AUTH + FIRESTORE CLOUD SYNC
+       Firebase project: gurubaraexpense. Register a Web App in this project and paste its SDK config below.
+       Local storage remains active when offline; Google sign-in enables per-user cloud sync.
+  -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, getDoc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Replace these values with Firebase Console > Project settings > Your apps > SDK setup > Config.
+    const firebaseConfig = {
+      apiKey: "PASTE_API_KEY_FROM_FIREBASE_CONSOLE",
+      authDomain: "gurubaraexpense.firebaseapp.com",
+      projectId: "gurubaraexpense",
+      storageBucket: "gurubaraexpense.firebasestorage.app",
+      messagingSenderId: "PASTE_MESSAGING_SENDER_ID",
+      appId: "PASTE_WEB_APP_ID"
+    };
+    const firebaseReady = !!(firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('PASTE_') && firebaseConfig.appId && !firebaseConfig.appId.startsWith('PASTE_') && firebaseConfig.projectId === 'gurubaraexpense');
+    let db = null, auth = null, currentUser = null;
+    let stopExpenses = null, stopAttendance = null;
+    window.activeDataMode = 'local';
+
+    function setSyncBadge(label, state) {
+      const badge = document.getElementById('userSyncBadge');
+      if (!badge) return;
+      const styles = state === 'online' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : state === 'error' ? 'text-red-700 bg-red-50 border-red-200' : 'text-amber-700 bg-amber-50 border-amber-200';
+      const dot = state === 'online' ? 'bg-emerald-500' : state === 'error' ? 'bg-red-500' : 'bg-amber-500';
+      badge.className = `text-[11px] font-bold border px-2.5 py-1 rounded-xl flex items-center gap-1.5 ${styles}`;
+      badge.innerHTML = `<span class="w-2 h-2 rounded-full ${dot}"></span> ${label}`;
+    }
+    window.setDatabaseSyncStatus = setSyncBadge;
+
+    function cloudCollection(name) {
+      return collection(db, 'users', currentUser.uid, name);
+    }
+    const PENDING_KEY = 'gurubara_pending_cloud_ops';
+    function getPendingOps() { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); } catch(e) { return []; } }
+    function queueCloudOp(op) { const q = getPendingOps(); q.push(op); localStorage.setItem(PENDING_KEY, JSON.stringify(q)); setSyncBadge('Saved locally · Waiting to sync', 'local'); }
+    async function flushPendingOps() {
+      if (!db || !currentUser || !navigator.onLine) return;
+      const q = getPendingOps(); if (!q.length) return;
+      const remaining = [];
+      for (const op of q) {
+        try {
+          const ref = doc(db, 'users', currentUser.uid, op.collection, op.id);
+          if (op.action === 'delete') await deleteDoc(ref);
+          else { const {id, ...data} = op.item; await setDoc(ref, {...data, createdBy: currentUser.uid, updatedAt: serverTimestamp()}); }
+        } catch(e) { console.error('Queued sync failed', e); remaining.push(op); }
+      }
+      localStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
+      if (!remaining.length) setSyncBadge('Online · Synced', 'online');
+    }
+    async function migrateLocalCollection(localKey, name, cloudItems) {
+      const localItems = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const cloudIds = new Set(cloudItems.map(x => x.id));
+      for (const item of localItems) {
+        if (!item.id) item.id = crypto.randomUUID();
+        if (!cloudIds.has(item.id)) {
+          const { id, ...data } = item;
+          await setDoc(doc(db, 'users', currentUser.uid, name, id), { ...data, createdBy: currentUser.uid, updatedAt: serverTimestamp() });
+        }
+      }
+    }
+    async function syncSitesCloud() {
+      if (!db || !currentUser) return;
+      const siteRef = doc(db, 'users', currentUser.uid, 'settings', 'app');
+      try {
+        const snap = await getDoc(siteRef);
+        if (snap.exists() && Array.isArray(snap.data().managedSites)) {
+          window.managedSites = snap.data().managedSites;
+          localStorage.setItem('gurubara_sites', JSON.stringify(window.managedSites));
+          window.refreshSiteDropdowns(); window.renderManagedSites();
+        } else {
+          await setDoc(siteRef, { managedSites: window.managedSites || ['Polachery Site'], updatedAt: serverTimestamp() });
+        }
+      } catch(e) { console.error('Site list sync failed', e); }
+    }
+    window.saveSitesToCloud = async function() {
+      if (!db || !currentUser) return;
+      try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'app'), { managedSites: window.managedSites || [], updatedAt: serverTimestamp() }); }
+      catch(e) { console.error('Site list cloud save failed', e); }
+    };
+    function subscribeCloud() {
+      if (!db || !currentUser) return;
+      syncSitesCloud();
+      if (stopExpenses) stopExpenses();
+      if (stopAttendance) stopAttendance();
+      window.activeDataMode = 'cloud';
+      setSyncBadge('Connecting cloud…', 'local');
+      let firstExpenseSnapshot = true, firstAttendanceSnapshot = true;
+      stopExpenses = onSnapshot(cloudCollection('expenses'), async snap => {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (firstExpenseSnapshot) {
+          firstExpenseSnapshot = false;
+          try { await migrateLocalCollection('gurubara_expenses', 'expenses', items); } catch(e) { console.error(e); }
+        }
+        for (const op of getPendingOps().filter(x => x.collection === 'expenses')) { if (op.action === 'delete') { const i = items.findIndex(x => x.id === op.id); if (i >= 0) items.splice(i, 1); } else if (!items.some(x => x.id === op.id)) items.unshift(op.item); }
+        window.expensesData = items;
+        if (typeof saveLocalExpenses === 'function') saveLocalExpenses();
+        window.updateExpenseTotals(); window.renderExpenseList();
+        setSyncBadge(navigator.onLine ? 'Online · Synced' : 'Offline · Saved locally', navigator.onLine ? 'online' : 'local');
+      }, err => { console.error(err); setSyncBadge('Cloud sync error', 'error'); });
+      stopAttendance = onSnapshot(cloudCollection('attendance'), async snap => {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (firstAttendanceSnapshot) {
+          firstAttendanceSnapshot = false;
+          try { await migrateLocalCollection('gurubara_labor', 'attendance', items); } catch(e) { console.error(e); }
+        }
+        for (const op of getPendingOps().filter(x => x.collection === 'attendance')) { if (op.action === 'delete') { const i = items.findIndex(x => x.id === op.id); if (i >= 0) items.splice(i, 1); } else if (!items.some(x => x.id === op.id)) items.unshift(op.item); }
+        window.attendanceData = items;
+        if (typeof saveLocalAttendance === 'function') saveLocalAttendance();
+        window.updateAttendanceTotals(); window.renderAttendanceList();
+        setSyncBadge(navigator.onLine ? 'Online · Synced' : 'Offline · Saved locally', navigator.onLine ? 'online' : 'local');
+      }, err => { console.error(err); setSyncBadge('Cloud sync error', 'error'); });
+    }
+    window.addExpenseToCloud = async item => {
+      if (!db || !currentUser) return false;
+      try { const {id, ...data} = item; await setDoc(doc(db, 'users', currentUser.uid, 'expenses', id), {...data, createdBy: currentUser.uid, updatedAt: serverTimestamp()}); return true; }
+      catch(e) { console.error('Expense cloud save failed', e); queueCloudOp({action:'save', collection:'expenses', id:item.id, item}); return false; }
+    };
+    window.deleteExpenseFromCloud = async id => {
+      if (!db || !currentUser) return false;
+      try { await deleteDoc(doc(db, 'users', currentUser.uid, 'expenses', id)); return true; } catch(e) { console.error(e); queueCloudOp({action:'delete', collection:'expenses', id}); return false; }
+    };
+    window.addAttendanceToCloud = async item => {
+      if (!db || !currentUser) return false;
+      try { const {id, ...data} = item; await setDoc(doc(db, 'users', currentUser.uid, 'attendance', id), {...data, createdBy: currentUser.uid, updatedAt: serverTimestamp()}); return true; }
+      catch(e) { console.error('Attendance cloud save failed', e); queueCloudOp({action:'save', collection:'attendance', id:item.id, item}); return false; }
+    };
+    window.deleteAttendanceFromCloud = async id => {
+      if (!db || !currentUser) return false;
+      try { await deleteDoc(doc(db, 'users', currentUser.uid, 'attendance', id)); return true; } catch(e) { console.error(e); queueCloudOp({action:'delete', collection:'attendance', id}); return false; }
+    };
+
+    if (!firebaseReady) {
+      setSyncBadge('Local database · Cloud setup needed', 'local');
+    } else {
+      try {
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app); db = getFirestore(app);
+        onAuthStateChanged(auth, user => {
+          currentUser = user;
+          const authLabel = document.getElementById('cloudUserLabel');
+          if (authLabel) authLabel.textContent = user ? `Signed in: ${user.displayName || user.email || 'Google account'}` : 'Not signed in';
+          if (user) { subscribeCloud(); flushPendingOps(); }
+          else { if (stopExpenses) stopExpenses(); if (stopAttendance) stopAttendance(); window.activeDataMode = 'local'; setSyncBadge('Local database · Sign in to sync', 'local'); }
+        });
+        const googleProvider = new GoogleAuthProvider();
+        window.loginWithGoogle = async () => {
+          try { await signInWithPopup(auth, googleProvider); return true; }
+          catch(e) { console.error('Google sign-in failed:', e); alert('Google sign-in failed: ' + (e.message || e.code)); return false; }
+        };
+        window.logoutCloudAccount = async () => { try { await signOut(auth); } catch(e) { alert(e.message); } };
+      } catch (err) {
+        console.error('Firebase initialization failed:', err);
+        setSyncBadge('Local database · Cloud setup error', 'error');
+      }
+    }
+    window.addEventListener('online', () => { if (currentUser) { setSyncBadge('Online · Syncing', 'online'); flushPendingOps(); } });
+    window.addEventListener('offline', () => setSyncBadge('Offline · Local database', 'local'));
+  </script>
+</head>
+<body class="min-h-screen text-[#0F172A] flex justify-center py-4 px-3 sm:px-6">
+
+  <!-- Main Application Container -->
+  <div class="app-shell w-full max-w-7xl flex flex-col gap-5">
+    
+    <!-- TOP BRAND HEADER -->
+    <header class="flex flex-col gap-2 pt-1 pb-1 px-1">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-[#FF6B00] text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+            <i data-lucide="building-2" class="w-6 h-6 stroke-[2.2]"></i>
+          </div>
+          <div>
+            <h1 class="text-base sm:text-lg font-extrabold text-[#0F172A] leading-tight tracking-tight">GURUBARA CONSTRUCTIONS</h1>
+            <p class="text-[11px] font-semibold text-[#FF6B00]">Site Attendance & Expense Register</p>
+          </div>
+        </div>
+
+        <div id="userSyncBadge" class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span> Local Mode
+        </div>
+      </div>
+
+      <!-- GLOBAL SITE FILTER BAR -->
+      <div class="bg-slate-100 p-2 rounded-2xl border border-slate-200 flex items-center justify-between mt-1">
+        <div class="flex items-center gap-2 text-xs font-bold text-[#0F172A]">
+          <i data-lucide="map-pin" class="w-4 h-4 text-[#FF6B00]"></i>
+          <span>Active Site View:</span>
+        </div>
+        <select id="globalSiteFilter" onchange="changeGlobalSiteView(this.value)" class="bg-white px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-[#0F172A] focus:outline-none focus:border-[#FF6B00]">
+          <option value="All Sites">All Sites (Combined)</option>
+          <option value="Keezhpadapai Site">Keezhpadapai Site</option>
+          <option value="Minjur Site">Minjur Site</option>
+          <option value="Periyapalayam Site">Periyapalayam Site</option>
+          <option value="Padappai Site">Padappai Site</option>
+          <option value="Madhavaram Site">Madhavaram Site</option>
+        </select>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3">
+        <span class="text-xs font-bold text-slate-600">Cloud sync (same Google account on every device):</span>
+        <span id="cloudUserLabel" class="text-[11px] text-slate-500">Not signed in</span>
+        <button type="button" onclick="window.loginWithGoogle && window.loginWithGoogle()" class="rounded-xl bg-[#FF6B00] px-3 py-2 text-xs font-extrabold text-white">Continue with Google</button>
+        <button type="button" onclick="window.logoutCloudAccount && window.logoutCloudAccount()" class="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Logout</button>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <div class="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+      <button 
+        id="tabBtnExpenses" 
+        onclick="switchTab('expenses')" 
+        class="tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all bg-[#0F172A] text-white shadow-sm">
+        <i data-lucide="receipt" class="w-4 h-4 text-[#FF6B00]"></i>
+        Daily Expenses
+      </button>
+      <button 
+        id="tabBtnAttendance" 
+        onclick="switchTab('attendance')" 
+        class="tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-700 hover:text-[#0F172A]">
+        <i data-lucide="users" class="w-4 h-4 text-[#FF6B00]"></i>
+        Labor & Attendance
+      </button>
+      <button id="tabBtnSites" onclick="switchTab('sites')" class="tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-700 hover:text-[#0F172A]">
+        <i data-lucide="map-pin" class="w-4 h-4 text-[#FF6B00]"></i>
+        Manage Sites
+      </button>
+    </div>
+
+    <!-- TAB 1: DAILY EXPENSES -->
+    <main id="tabExpenses" class="flex flex-col gap-4">
+      <section class="grid grid-cols-2 gap-3.5">
+        <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-xl bg-orange-50 text-[#FF6B00] flex items-center justify-center">
+              <i data-lucide="trending-up" class="w-4 h-4 stroke-[2.5]"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-500 tracking-wider uppercase">TODAY</span>
+          </div>
+          <div class="text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight font-mono-num" id="todayAmount">₹0.00</div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <i data-lucide="calendar" class="w-4 h-4 stroke-[2.5]"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-500 tracking-wider uppercase">THIS MONTH</span>
+          </div>
+          <div class="text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight font-mono-num" id="monthAmount">₹0.00</div>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-[28px] p-5 border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-[#0F172A] flex items-center gap-1.5 mb-3.5">
+          <span class="text-[#FF6B00] text-xl font-bold">+</span> Add New Expense
+        </h2>
+
+        <form id="expenseForm" class="flex flex-col gap-3.5">
+          <div class="flex flex-col gap-1">
+            <label for="expenseTitle" class="text-xs font-bold text-[#0F172A]">Expense Title</label>
+            <input type="text" id="expenseTitle" placeholder="e.g., Cement, Sand, Diesel..." required class="w-full px-4 py-2.5 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#FF6B00] focus:bg-white focus:outline-none text-[#0F172A] placeholder-slate-400 font-medium text-sm transition-all" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label for="expenseAmount" class="text-xs font-bold text-[#0F172A]">Amount (₹)</label>
+              <input type="number" id="expenseAmount" step="0.01" min="0.01" placeholder="0.00" required class="w-full px-4 py-2.5 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#FF6B00] focus:bg-white focus:outline-none text-[#0F172A] placeholder-slate-400 font-semibold font-mono-num text-sm transition-all" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label for="expenseSite" class="text-xs font-bold text-[#0F172A]">Site Location</label>
+              <select id="expenseSite" class="w-full px-3 py-2.5 bg-slate-50 rounded-2xl border border-slate-200 focus:border-[#FF6B00] text-xs font-bold text-[#0F172A]">
+                <option value="Keezhpadapai Site">Keezhpadapai Site</option>
+                <option value="Minjur Site">Minjur Site</option>
+                <option value="Periyapalayam Site">Periyapalayam Site</option>
+                <option value="Padappai Site">Padappai Site</option>
+                <option value="Madhavaram Site">Madhavaram Site</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1.5 pt-1">
+            <label class="text-xs font-bold text-[#0F172A]">Payment Method (UPI Launch):</label>
+            <div class="grid grid-cols-3 gap-2" id="paymentMethodContainer">
+              <button type="button" data-method="GPay" onclick="selectPaymentMethod('GPay')" class="payment-pill border-2 border-[#FF6B00] bg-[#FF6B00] text-white py-2 px-2 rounded-2xl font-bold text-xs flex items-center justify-center gap-1 transition-all shadow-sm active:scale-95">GPay</button>
+              <button type="button" data-method="Paytm" onclick="selectPaymentMethod('Paytm')" class="payment-pill opacity-70 border-2 border-slate-200 bg-white text-[#0F172A] py-2 px-2 rounded-2xl font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95">Paytm</button>
+              <button type="button" data-method="Cash" onclick="selectPaymentMethod('Cash')" class="payment-pill opacity-70 border-2 border-slate-200 bg-white text-[#0F172A] py-2 px-2 rounded-2xl font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95">Cash</button>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full mt-2 py-3 bg-[#0F172A] hover:bg-slate-800 text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm">
+            <i data-lucide="plus-circle" class="w-4 h-4 text-[#FF6B00]"></i> Save Expense
+          </button>
+        </form>
+      </section>
+
+      <section class="flex flex-col gap-2.5">
+        <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase px-1">RECENT EXPENSES</h3>
+        <div class="bg-white rounded-[28px] p-2 border border-slate-200 shadow-sm min-h-[140px] flex flex-col justify-center">
+          <div id="expensesList" class="divide-y divide-slate-100"></div>
+          <div id="emptyState" class="py-8 text-center flex flex-col items-center justify-center gap-1.5">
+            <i data-lucide="receipt" class="w-8 h-8 text-slate-300 stroke-[1.5]"></i>
+            <p class="text-xs font-medium text-slate-400">No expenses recorded for this site</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- TAB 2: LABOR ATTENDANCE & AUTOMATED WAGE CALCULATOR -->
+    <main id="tabAttendance" class="hidden flex-col gap-4">
+      <section class="grid grid-cols-3 gap-2">
+        <div class="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">TOTAL LABORS</span>
+          <div class="text-lg font-bold text-[#0F172A] font-mono-num mt-1" id="statTodayLabors">0</div>
+        </div>
+        <div class="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">TODAY WAGES</span>
+          <div class="text-sm sm:text-base font-bold text-[#FF6B00] font-mono-num mt-1" id="statTodayWages">₹0</div>
+        </div>
+        <div class="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">MONTH WAGES</span>
+          <div class="text-sm sm:text-base font-bold text-[#0F172A] font-mono-num mt-1" id="statMonthWages">₹0</div>
+        </div>
+      </section>
+
+      <!-- DAILY ATTENDANCE LOGGER FORM -->
+      <section class="bg-white rounded-[28px] p-5 border border-slate-200 shadow-sm">
+        <h2 class="text-base font-bold text-[#0F172A] flex items-center gap-2 mb-3.5">
+          <i data-lucide="user-check" class="w-5 h-5 text-[#FF6B00]"></i> Daily Attendance Entry
+        </h2>
+
+        <form id="attendanceForm" class="flex flex-col gap-3.5">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label for="attDate" class="text-xs font-bold text-[#0F172A]">Date</label>
+              <input type="date" id="attDate" required class="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#FF6B00] focus:bg-white text-xs sm:text-sm font-semibold text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label for="attSite" class="text-xs font-bold text-[#0F172A]">Site Name</label>
+              <select id="attSite" class="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#FF6B00] focus:bg-white text-xs sm:text-sm font-semibold text-[#0F172A]">
+                <option value="Keezhpadapai Site">Keezhpadapai Site</option>
+                <option value="Minjur Site">Minjur Site</option>
+                <option value="Periyapalayam Site">Periyapalayam Site</option>
+                <option value="Padappai Site">Padappai Site</option>
+                <option value="Madhavaram Site">Madhavaram Site</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- UNIFIED MASON & HELPER CARD -->
+          <div class="bg-orange-50/50 p-4 rounded-2xl border border-orange-200 flex flex-col gap-3">
+            <div class="flex items-center justify-between border-b border-orange-200 pb-2">
+              <span class="text-xs font-extrabold text-[#0F172A]">Mason & Helper Team</span>
+              <span id="masonHelperSubtotal" class="text-xs font-bold text-[#FF6B00] font-mono-num">₹0</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1 bg-white p-2.5 rounded-xl border border-orange-100">
+                <span class="text-[11px] font-bold text-[#FF6B00]">Mason (₹1,100)</span>
+                <input type="number" id="countMason" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2.5 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-base font-bold font-mono-num text-[#0F172A] focus:border-[#FF6B00] focus:outline-none" />
+              </div>
+
+              <div class="flex flex-col gap-1 bg-white p-2.5 rounded-xl border border-orange-100">
+                <span class="text-[11px] font-bold text-blue-600">Helper (₹900)</span>
+                <input type="number" id="countHelper" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2.5 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-base font-bold font-mono-num text-[#0F172A] focus:border-[#FF6B00] focus:outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <!-- OTHER TRADES -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Carpenter (₹1,200)</span>
+              <input type="number" id="countCarpenter" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Painter (₹1,200)</span>
+              <input type="number" id="countPainter" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Shuttering (₹1,200)</span>
+              <input type="number" id="countShuttering" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Tiles (₹1,200)</span>
+              <input type="number" id="countTiles" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Electrical (₹1,200)</span>
+              <input type="number" id="countElectrical" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-[11px] font-bold text-[#0F172A]">Plumbing (₹1,200)</span>
+              <input type="number" id="countPlumbing" step="0.5" min="0" value="0" placeholder="0" class="w-full px-2 py-1 bg-white rounded-lg border border-slate-200 text-sm font-bold font-mono-num text-[#0F172A]" />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label for="advancePaid" class="text-xs font-bold text-[#0F172A]">Advance / Paid Amount on Site (₹)</label>
+            <input type="number" id="advancePaid" step="1" min="0" value="0" placeholder="0" class="w-full px-3.5 py-2.5 bg-slate-50 rounded-xl border border-slate-200 focus:border-[#FF6B00] text-sm font-bold font-mono-num text-[#0F172A]" />
+          </div>
+
+          <!-- SUMMARY CARD -->
+          <div class="bg-[#0F172A] text-white rounded-2xl p-3.5 flex flex-col gap-2 shadow-sm">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-1 flex justify-between">
+              <span>Automatic Wage Summary</span>
+              <span id="calcTotalLaborsCount" class="text-[#FF6B00]">0 Workers</span>
+            </div>
+            
+            <div class="flex justify-between items-baseline pt-1">
+              <span class="text-xs font-bold text-slate-300">Gross Total Bill:</span>
+              <span id="calcGrossWage" class="text-base font-bold text-white font-mono-num">₹0</span>
+            </div>
+
+            <div class="flex justify-between items-baseline border-t border-slate-800 pt-1.5">
+              <span class="text-xs font-bold text-slate-300">Net Payable Balance:</span>
+              <span id="calcNetPayable" class="text-lg font-extrabold text-[#FF6B00] font-mono-num">₹0</span>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full py-3 bg-[#FF6B00] hover:bg-[#E56000] text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm">
+            <i data-lucide="check-circle" class="w-4 h-4"></i> Save Daily Attendance
+          </button>
+        </form>
+      </section>
+
+      <section class="flex flex-col gap-2.5">
+        <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase px-1">ATTENDANCE LEDGER</h3>
+        <div class="bg-white rounded-[28px] p-2 border border-slate-200 shadow-sm min-h-[140px] flex flex-col justify-center">
+          <div id="attendanceList" class="divide-y divide-slate-100"></div>
+          <div id="emptyAttendanceState" class="py-8 text-center flex flex-col items-center justify-center gap-1.5">
+            <i data-lucide="users" class="w-8 h-8 text-slate-300 stroke-[1.5]"></i>
+            <p class="text-xs font-medium text-slate-400">No attendance entries recorded for this site</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- TAB 3: MANAGE SITES -->
+    <main id="tabSites" class="hidden flex-col gap-4">
+      <section class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-2 mb-2">
+          <i data-lucide="map-pin" class="w-5 h-5 text-[#FF6B00]"></i>
+          <h2 class="font-extrabold text-[#0F172A]">Manage Construction Sites</h2>
+        </div>
+        <p class="text-xs text-slate-500 mb-4">Add new sites, rename existing sites, or remove unused sites. Changes update all site dropdowns.</p>
+        <form id="addSiteForm" class="flex gap-2 mb-4">
+          <input id="newSiteName" type="text" maxlength="60" placeholder="Enter new site name" class="min-w-0 flex-1 px-3 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:border-[#FF6B00]" required>
+          <button type="submit" class="px-4 py-3 rounded-xl bg-[#FF6B00] text-white text-xs font-extrabold">+ Add Site</button>
+        </form>
+        <div id="managedSitesList" class="flex flex-col gap-2"></div>
+      </section>
+      <p class="text-[11px] text-slate-400 text-center">Site names, expenses and attendance are saved locally and synced to your private Firebase account after Google sign-in. Deleting a site with records is blocked.</p>
+    </main>
+
+  </div>
+
+  <script>
+    window.expensesData = [];
+    window.attendanceData = [];
+    let selectedMethod = 'GPay';
+    window.currentSiteFilter = 'All Sites';
+
+    function loadLocalData() {
+      try {
+        window.expensesData = JSON.parse(localStorage.getItem('gurubara_expenses') || '[]');
+        window.attendanceData = JSON.parse(localStorage.getItem('gurubara_labor') || '[]');
+      } catch (e) {
+        window.expensesData = [];
+        window.attendanceData = [];
+      }
+    }
+
+    function saveLocalExpenses() {
+      localStorage.setItem('gurubara_expenses', JSON.stringify(window.expensesData));
+    }
+
+    function saveLocalAttendance() {
+      localStorage.setItem('gurubara_labor', JSON.stringify(window.attendanceData));
+    }
+
+    function formatCurrency(num) {
+      return '₹' + (Number(num) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+
+    const DEFAULT_SITES = ['Polachery Site'];
+    window.managedSites = DEFAULT_SITES.slice();
+
+    window.refreshSiteDropdowns = function() {
+      const makeOptions = includeAll => (includeAll ? '<option value="All Sites">All Sites (Combined)</option>' : '') +
+        window.managedSites.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+      const global = document.getElementById('globalSiteFilter');
+      const expense = document.getElementById('expenseSite');
+      const attendance = document.getElementById('attSite');
+      if (global) global.innerHTML = makeOptions(true);
+      if (expense) expense.innerHTML = makeOptions(false);
+      if (attendance) attendance.innerHTML = makeOptions(false);
+      if (!window.managedSites.includes(window.currentSiteFilter)) window.currentSiteFilter = 'All Sites';
+      if (global) global.value = window.currentSiteFilter;
+      if (expense && window.managedSites.length && !window.managedSites.includes(expense.value)) expense.value = window.managedSites[0];
+      if (attendance && window.managedSites.length && !window.managedSites.includes(attendance.value)) attendance.value = window.managedSites[0];
+    };
+
+    window.renderManagedSites = function() {
+      const list = document.getElementById('managedSitesList');
+      if (!list) return;
+      if (!window.managedSites.length) { list.innerHTML = '<p class="text-sm text-slate-400 text-center py-5">No sites added yet.</p>'; return; }
+      list.innerHTML = window.managedSites.map((name, index) => `
+        <div class="flex items-center gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
+          <div class="w-8 h-8 rounded-lg bg-orange-100 text-[#FF6B00] flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4"></i></div>
+          <span class="flex-1 min-w-0 text-sm font-bold text-slate-800 break-words">${escapeHtml(name)}</span>
+          <button type="button" onclick="renameManagedSite(${index})" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700">Rename</button>
+          <button type="button" onclick="deleteManagedSite(${index})" class="px-3 py-2 rounded-lg bg-white border border-red-200 text-xs font-bold text-red-600">Delete</button>
+        </div>`).join('');
+      if (window.lucide) lucide.createIcons();
+    };
+
+    window.renameManagedSite = function(index) {
+      const oldName = window.managedSites[index];
+      const newName = prompt('Enter the new name for "' + oldName + '":', oldName);
+      if (newName === null) return;
+      const clean = newName.trim();
+      if (!clean) return alert('Please enter a site name.');
+      if (window.managedSites.some((n, i) => i !== index && n.toLowerCase() === clean.toLowerCase())) return alert('That site name already exists.');
+      window.managedSites[index] = clean;
+      window.expensesData.forEach(item => { if (item.site === oldName) item.site = clean; });
+      window.attendanceData.forEach(item => { if (item.site === oldName) item.site = clean; });
+      try { localStorage.setItem('gurubara_sites', JSON.stringify(window.managedSites)); saveLocalExpenses(); saveLocalAttendance(); } catch(e) {}
+      if (window.saveSitesToCloud) window.saveSitesToCloud();
+      if (window.currentSiteFilter === oldName) window.currentSiteFilter = clean;
+      window.refreshSiteDropdowns(); window.renderManagedSites();
+      window.updateExpenseTotals(); window.renderExpenseList();
+      window.updateAttendanceTotals(); window.renderAttendanceList();
+    };
+
+    window.deleteManagedSite = function(index) {
+      const name = window.managedSites[index];
+      const inUse = window.expensesData.some(item => item.site === name) || window.attendanceData.some(item => item.site === name);
+      if (inUse) return alert('This site has expense or attendance records. Rename it instead, or move its records before deleting.');
+      if (!confirm('Delete "' + name + '" from the site list?')) return;
+      window.managedSites.splice(index, 1);
+      try { localStorage.setItem('gurubara_sites', JSON.stringify(window.managedSites)); } catch(e) {}
+      if (window.saveSitesToCloud) window.saveSitesToCloud();
+      if (window.currentSiteFilter === name) window.currentSiteFilter = 'All Sites';
+      window.refreshSiteDropdowns(); window.renderManagedSites();
+      window.updateExpenseTotals(); window.renderExpenseList();
+      window.updateAttendanceTotals(); window.renderAttendanceList();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('addSiteForm');
+      if (form) form.addEventListener('submit', event => {
+        event.preventDefault();
+        const input = document.getElementById('newSiteName');
+        const name = input.value.trim();
+        if (!name) return;
+        if (window.managedSites.some(site => site.toLowerCase() === name.toLowerCase())) return alert('That site name already exists.');
+        window.managedSites.push(name);
+        try { localStorage.setItem('gurubara_sites', JSON.stringify(window.managedSites)); } catch(e) {}
+        if (window.saveSitesToCloud) window.saveSitesToCloud();
+        input.value = '';
+        window.refreshSiteDropdowns(); window.renderManagedSites();
+      });
+    });
+
+    window.changeGlobalSiteView = function(siteName) {
+      window.currentSiteFilter = siteName;
+      // Sync form site dropdowns to match active view for convenience
+      const expSite = document.getElementById('expenseSite');
+      const attSite = document.getElementById('attSite');
+      if (expSite && siteName !== 'All Sites') expSite.value = siteName;
+      if (attSite && siteName !== 'All Sites') attSite.value = siteName;
+
+      window.updateExpenseTotals();
+      window.renderExpenseList();
+      window.updateAttendanceTotals();
+      window.renderAttendanceList();
+    };
+
+    window.switchTab = function(tab) {
+      const tabs = {
+        expenses: ['tabExpenses', 'tabBtnExpenses'],
+        attendance: ['tabAttendance', 'tabBtnAttendance'],
+        sites: ['tabSites', 'tabBtnSites']
+      };
+      Object.keys(tabs).forEach(key => {
+        const panel = document.getElementById(tabs[key][0]);
+        const button = document.getElementById(tabs[key][1]);
+        const active = key === tab;
+        panel.classList.toggle('hidden', !active);
+        panel.classList.toggle('flex', active);
+        button.className = 'tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ' +
+          (active ? 'bg-[#0F172A] text-white shadow-sm' : 'text-slate-700 hover:text-[#0F172A]');
+      });
+      if (tab === 'sites') window.renderManagedSites();
+    };
+
+    window.updateExpenseTotals = function() {
+      const now = new Date();
+      let todayTotal = 0;
+      let monthTotal = 0;
+
+      const filtered = (window.expensesData || []).filter(item => {
+        if (window.currentSiteFilter === 'All Sites') return true;
+        return item.site === window.currentSiteFilter;
+      });
+
+      filtered.forEach(item => {
+        const d = new Date(item.date);
+        if (d.toDateString() === now.toDateString()) {
+          todayTotal += Number(item.amount) || 0;
+        }
+        if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+          monthTotal += Number(item.amount) || 0;
+        }
+      });
+
+      document.getElementById('todayAmount').innerText = formatCurrency(todayTotal);
+      document.getElementById('monthAmount').innerText = formatCurrency(monthTotal);
+    };
+
+    window.renderExpenseList = function() {
+      const container = document.getElementById('expensesList');
+      const emptyState = document.getElementById('emptyState');
+      if (!container || !emptyState) return;
+      container.innerHTML = '';
+
+      const filtered = (window.expensesData || []).filter(item => {
+        if (window.currentSiteFilter === 'All Sites') return true;
+        return item.site === window.currentSiteFilter;
+      });
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      filtered.forEach(item => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'p-3 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors';
+        const methodColor = item.method === 'GPay' ? 'bg-emerald-100 text-emerald-700' : (item.method === 'Paytm' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700');
+
+        itemEl.innerHTML = `
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-bold text-[#0F172A]">${escapeHtml(item.title)}</span>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold ${methodColor}">${escapeHtml(item.method || 'GPay')}</span>
+              <span class="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">${escapeHtml(item.site || 'General')}</span>
+              <span class="text-[10px] font-semibold text-slate-400">${new Date(item.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-[#0F172A] font-mono-num">${formatCurrency(item.amount)}</span>
+            <button onclick="deleteExpenseItem('${item.id}')" class="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemEl);
+      });
+
+      if (window.lucide) lucide.createIcons();
+    };
+
+    document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('expenseTitle').value.trim();
+      const amount = parseFloat(document.getElementById('expenseAmount').value);
+      const site = document.getElementById('expenseSite').value;
+
+      if (!title || isNaN(amount) || amount <= 0) return;
+
+      const newExpense = {
+        title,
+        amount,
+        site,
+        method: selectedMethod,
+        date: new Date().toISOString()
+      };
+
+      newExpense.id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+      window.expensesData.unshift(newExpense);
+      saveLocalExpenses();
+      window.updateExpenseTotals(); window.renderExpenseList();
+      if (window.activeDataMode === 'cloud') {
+        const synced = await window.addExpenseToCloud(newExpense);
+        if (!synced) window.setDatabaseSyncStatus('Saved locally · Cloud retry needed', 'local');
+      }
+
+      document.getElementById('expenseTitle').value = '';
+      document.getElementById('expenseAmount').value = '';
+    });
+
+    window.deleteExpenseItem = async function(id) {
+      window.expensesData = window.expensesData.filter(e => e.id !== id);
+      saveLocalExpenses(); window.updateExpenseTotals(); window.renderExpenseList();
+      if (window.activeDataMode === 'cloud') await window.deleteExpenseFromCloud(id);
+    };
+
+    window.selectPaymentMethod = function(method) {
+      selectedMethod = method;
+      const pills = document.querySelectorAll('.payment-pill');
+      pills.forEach(pill => {
+        const m = pill.getAttribute('data-method');
+        if (m === method) {
+          pill.classList.remove('opacity-70');
+          pill.classList.add('border-[#FF6B00]', 'bg-[#FF6B00]', 'text-white', 'shadow-sm');
+        } else {
+          pill.classList.add('opacity-70');
+          pill.classList.remove('border-[#FF6B00]', 'bg-[#FF6B00]', 'text-white', 'shadow-sm');
+          pill.classList.add('border-slate-200', 'bg-white', 'text-[#0F172A]');
+        }
+      });
+
+      const amountVal = parseFloat(document.getElementById('expenseAmount').value) || 0;
+      const titleVal = document.getElementById('expenseTitle').value.trim() || 'Site Expense';
+      const note = encodeURIComponent(`Gurubara - ${titleVal}`);
+
+      if (method === 'GPay' || method === 'Paytm') {
+        window.location.href = `upi://pay?pa=&pn=Gurubara%20Constructions&am=${amountVal}&cu=INR&tn=${note}`;
+      }
+    };
+
+    function calculateLiveWage() {
+      const mason = parseFloat(document.getElementById('countMason').value) || 0;
+      const helper = parseFloat(document.getElementById('countHelper').value) || 0;
+      const carpenter = parseFloat(document.getElementById('countCarpenter').value) || 0;
+      const painter = parseFloat(document.getElementById('countPainter').value) || 0;
+      const shuttering = parseFloat(document.getElementById('countShuttering').value) || 0;
+      const tiles = parseFloat(document.getElementById('countTiles').value) || 0;
+      const electrical = parseFloat(document.getElementById('countElectrical').value) || 0;
+      const plumbing = parseFloat(document.getElementById('countPlumbing').value) || 0;
+      const advance = parseFloat(document.getElementById('advancePaid').value) || 0;
+
+      const masonSub = (mason * 1100) + (helper * 900);
+      document.getElementById('masonHelperSubtotal').innerText = formatCurrency(masonSub);
+
+      const totalWorkers = mason + helper + carpenter + painter + shuttering + tiles + electrical + plumbing;
+      const gross = (mason * 1100) + (helper * 900) + ((carpenter + painter + shuttering + tiles + electrical + plumbing) * 1200);
+      const netPayable = gross - advance;
+
+      document.getElementById('calcTotalLaborsCount').innerText = `${totalWorkers} Workers`;
+      document.getElementById('calcGrossWage').innerText = formatCurrency(gross);
+      document.getElementById('calcNetPayable').innerText = formatCurrency(netPayable);
+    }
+
+    ['countMason', 'countHelper', 'countCarpenter', 'countPainter', 'countShuttering', 'countTiles', 'countElectrical', 'countPlumbing', 'advancePaid'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', calculateLiveWage);
+    });
+
+    window.updateAttendanceTotals = function() {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+
+      let todayLabors = 0;
+      let todayWages = 0;
+      let monthWages = 0;
+
+      const filtered = (window.attendanceData || []).filter(item => {
+        if (window.currentSiteFilter === 'All Sites') return true;
+        return item.site === window.currentSiteFilter;
+      });
+
+      filtered.forEach(att => {
+        const gross = (att.mason * 1100) + (att.helper * 900) + ((att.carpenter + att.painter + att.shuttering + att.tiles + att.electrical + att.plumbing) * 1200);
+        const attDate = new Date(att.date);
+
+        if (att.date === todayStr) {
+          todayLabors += (Number(att.mason) + Number(att.helper) + Number(att.carpenter) + Number(att.painter) + Number(att.shuttering) + Number(att.tiles) + Number(att.electrical) + Number(att.plumbing));
+          todayWages += gross;
+        }
+
+        if (attDate.getMonth() === currentMonth && attDate.getFullYear() === currentYear) {
+          monthWages += gross;
+        }
+      });
+
+      document.getElementById('statTodayLabors').innerText = todayLabors;
+      document.getElementById('statTodayWages').innerText = formatCurrency(todayWages);
+      document.getElementById('statMonthWages').innerText = formatCurrency(monthWages);
+    };
+
+    window.renderAttendanceList = function() {
+      const container = document.getElementById('attendanceList');
+      const emptyState = document.getElementById('emptyAttendanceState');
+      if (!container || !emptyState) return;
+      container.innerHTML = '';
+
+      const filtered = (window.attendanceData || []).filter(item => {
+        if (window.currentSiteFilter === 'All Sites') return true;
+        return item.site === window.currentSiteFilter;
+      });
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      const sorted = [...filtered].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      sorted.forEach(item => {
+        const totalW = (Number(item.mason)||0) + (Number(item.helper)||0) + (Number(item.carpenter)||0) + (Number(item.painter)||0) + (Number(item.shuttering)||0) + (Number(item.tiles)||0) + (Number(item.electrical)||0) + (Number(item.plumbing)||0);
+        const gross = ((item.mason||0) * 1100) + ((item.helper||0) * 900) + (((item.carpenter||0) + (item.painter||0) + (item.shuttering||0) + (item.tiles||0) + (item.electrical||0) + (item.plumbing||0)) * 1200);
+        const net = gross - (item.advance || 0);
+
+        const itemEl = document.createElement('div');
+        itemEl.className = 'p-3 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors';
+
+        itemEl.innerHTML = `
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-bold text-[#0F172A]">${escapeHtml(item.site)}</span>
+            <span class="text-[10px] font-semibold text-slate-400">${item.date}</span>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="px-1.5 py-0.5 bg-orange-100 text-[#FF6B00] rounded-md text-[10px] font-bold">${totalW} Workers</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex flex-col items-end">
+              <span class="text-xs font-bold text-[#0F172A] font-mono-num">${formatCurrency(net)}</span>
+              <span class="text-[10px] text-slate-400 font-medium">Gross: ${formatCurrency(gross)}</span>
+            </div>
+            <button onclick="deleteAttendanceItem('${item.id}')" class="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemEl);
+      });
+
+      if (window.lucide) lucide.createIcons();
+    };
+
+    document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const date = document.getElementById('attDate').value;
+      const site = document.getElementById('attSite').value;
+      const mason = parseFloat(document.getElementById('countMason').value) || 0;
+      const helper = parseFloat(document.getElementById('countHelper').value) || 0;
+      const carpenter = parseFloat(document.getElementById('countCarpenter').value) || 0;
+      const painter = parseFloat(document.getElementById('countPainter').value) || 0;
+      const shuttering = parseFloat(document.getElementById('countShuttering').value) || 0;
+      const tiles = parseFloat(document.getElementById('countTiles').value) || 0;
+      const electrical = parseFloat(document.getElementById('countElectrical').value) || 0;
+      const plumbing = parseFloat(document.getElementById('countPlumbing').value) || 0;
+      const advance = parseFloat(document.getElementById('advancePaid').value) || 0;
+
+      if ((mason + helper + carpenter + painter + shuttering + tiles + electrical + plumbing) <= 0) return;
+
+      const newAttendance = {
+        date,
+        site,
+        mason,
+        helper,
+        carpenter,
+        painter,
+        shuttering,
+        tiles,
+        electrical,
+        plumbing,
+        advance
+      };
+
+      newAttendance.id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString());
+      window.attendanceData.unshift(newAttendance);
+      saveLocalAttendance(); window.updateAttendanceTotals(); window.renderAttendanceList();
+      if (window.activeDataMode === 'cloud') {
+        const synced = await window.addAttendanceToCloud(newAttendance);
+        if (!synced) window.setDatabaseSyncStatus('Saved locally · Cloud retry needed', 'local');
+      }
+
+      ['countMason', 'countHelper', 'countCarpenter', 'countPainter', 'countShuttering', 'countTiles', 'countElectrical', 'countPlumbing'].forEach(id => {
+        document.getElementById(id).value = '0';
+      });
+      document.getElementById('advancePaid').value = '0';
+      calculateLiveWage();
+    });
+
+    window.deleteAttendanceItem = async function(id) {
+      window.attendanceData = window.attendanceData.filter(att => att.id !== id);
+      saveLocalAttendance(); window.updateAttendanceTotals(); window.renderAttendanceList();
+      if (window.activeDataMode === 'cloud') await window.deleteAttendanceFromCloud(id);
+    };
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const attDateEl = document.getElementById('attDate');
+      if (attDateEl) attDateEl.value = new Date().toISOString().slice(0, 10);
+      const RESET_MARKER = 'gurubara_polachery_reset_v1';
+      try {
+        if (localStorage.getItem(RESET_MARKER) !== 'done') {
+          localStorage.removeItem('gurubara_expenses');
+          localStorage.removeItem('gurubara_labor');
+          localStorage.removeItem('gurubara_sites');
+          localStorage.setItem('gurubara_sites', JSON.stringify(['Polachery Site']));
+          localStorage.setItem(RESET_MARKER, 'done');
+        }
+      } catch (e) {}
+      loadLocalData();
+      window.managedSites = ['Polachery Site'];
+      try { localStorage.setItem('gurubara_sites', JSON.stringify(window.managedSites)); } catch (e) {}
+      window.currentSiteFilter = 'Polachery Site';
+      window.refreshSiteDropdowns();
+      window.updateExpenseTotals();
+      window.renderExpenseList();
+      calculateLiveWage();
+      window.updateAttendanceTotals();
+      window.renderAttendanceList();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

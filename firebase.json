@@ -1,0 +1,1 @@
+{"functions":{"source":"functions"},"firestore":{"rules":"firestore.rules"},"hosting":{"public":".","ignore":["firebase.json","**/.*","**/node_modules/**","functions/**","SETUP.md","previous_app_backup.html"]}}
