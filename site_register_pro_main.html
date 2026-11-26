@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Register Pro - Expenses & Attendance</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brandOrange: '#FF6B00',
+            brandOrangeHover: '#E56000',
+            navyDark: '#0F172A',
+            navyCard: '#1E293B',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #F8FAFC;
+      color: #0F172A;
+      font-family: 'Inter', sans-serif;
+    }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+
+  <!-- UTILITY & NAVIGATION FUNCTIONS GLOBAL INITIALIZATION -->
+  <script>
+    window.formatCurrency = function(num) {
+      return '₹' + (Number(num) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
+    window.escapeHtml = function(str) {
+      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    };
+
+    window.switchTab = function(tab) {
+      const tabExpenses = document.getElementById('tabExpenses');
+      const tabAttendance = document.getElementById('tabAttendance');
+      const btnExpenses = document.getElementById('tabBtnExpenses');
+      const btnAttendance = document.getElementById('tabBtnAttendance');
+
+      if (!tabExpenses || !tabAttendance) return;
+
+      if (tab === 'expenses') {
+        tabExpenses.classList.remove('hidden');
+        tabExpenses.classList.add('flex');
+        tabAttendance.classList.add('hidden');
+        tabAttendance.classList.remove('flex');
+
+        btnExpenses.className = 'tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all bg-white text-[#0F172A] shadow-sm';
+        btnAttendance.className = 'tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-600 hover:text-slate-900';
+      } else {
+        tabAttendance.classList.remove('hidden');
+        tabAttendance.classList.add('flex');
+        tabExpenses.classList.add('hidden');
+        tabExpenses.classList.remove('flex');
+
+        btnAttendance.className = 'tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all bg-white text-[#0F172A] shadow-sm';
+        btnExpenses.className = 'tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-600 hover:text-slate-900';
+      }
+    };
+
+    window.toggleCustomSiteInput = function(val) {
+      const customInput = document.getElementById('attCustomSite');
+      if (!customInput) return;
+      if (val === 'CUSTOM') {
+        customInput.classList.remove('hidden');
+        customInput.focus();
+      } else {
+        customInput.classList.add('hidden');
+        customInput.value = '';
+      }
+    };
+  </script>
+
+  <!-- FIREBASE MODULE INTEGRATION -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithCustomToken, 
+      signInAnonymously, 
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      addDoc, 
+      updateDoc,
+      deleteDoc, 
+      onSnapshot, 
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global variables provided by environment or fallback configuration
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'site-register-app';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+      apiKey: "demo-api-key",
+      authDomain: "demo-app.firebaseapp.com",
+      projectId: "demo-app",
+      storageBucket: "demo-app.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:demo"
+    };
+
+    let app, auth, db;
+    let currentUser = null;
+    let unsubscribeExpenses = null;
+    let unsubscribeAttendance = null;
+
+    // Initialize Firebase
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      window.firebaseApp = app;
+      window.firebaseAuth = auth;
+      window.firebaseDb = db;
+    } catch (err) {
+      console.warn("Firebase initialization skipped or running in fallback offline mode:", err);
+    }
+
+    // Authenticate user & Listen to Auth changes
+    window.initCloudAuth = async function() {
+      if (!auth) return;
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.warn("Auth fallback to anonymous auth failed:", err);
+      }
+    };
+
+    if (auth) {
+      onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        window.currentUserId = user ? user.uid : null;
+        const userBadge = document.getElementById('userSyncBadge');
+        if (userBadge) {
+          if (user) {
+            userBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cloud Sync Active (${user.uid.substring(0, 6)}...)`;
+            userBadge.className = "text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5";
+            window.activeDataMode = 'cloud';
+            window.subscribeToCloudData();
+          } else {
+            userBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> Local Storage Only`;
+            userBadge.className = "text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5";
+            window.activeDataMode = 'local';
+          }
+        }
+      });
+    }
+
+    // Real-time Firestore Subscriptions
+    window.subscribeToCloudData = function() {
+      if (!db || !currentUser) return;
+
+      if (unsubscribeExpenses) unsubscribeExpenses();
+      if (unsubscribeAttendance) unsubscribeAttendance();
+
+      const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+      const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
+
+      // Subscribe to Expenses
+      unsubscribeExpenses = onSnapshot(expensesRef, (snapshot) => {
+        const cloudExpenses = [];
+        snapshot.forEach((docSnap) => {
+          cloudExpenses.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        window.expensesData = cloudExpenses;
+        window.updateExpenseTotals();
+        window.renderExpenseList();
+      }, (error) => {
+        console.error("Expenses snapshot error:", error);
+      });
+
+      // Subscribe to Attendance
+      unsubscribeAttendance = onSnapshot(attendanceRef, (snapshot) => {
+        const cloudAttendance = [];
+        snapshot.forEach((docSnap) => {
+          cloudAttendance.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        window.attendanceData = cloudAttendance;
+        window.updateAttendanceTotals();
+        window.renderAttendanceList();
+      }, (error) => {
+        console.error("Attendance snapshot error:", error);
+      });
+    };
+
+    window.unsubscribeFromCloud = function() {
+      if (unsubscribeExpenses) unsubscribeExpenses();
+      if (unsubscribeAttendance) unsubscribeAttendance();
+    };
+
+    // Database Actions for Cloud
+    window.addExpenseToCloud = async function(expenseObj) {
+      if (!db || !currentUser) return false;
+      try {
+        const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+        await addDoc(expensesRef, {
+          ...expenseObj,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+        return true;
+      } catch (e) {
+        console.error("Error adding expense to cloud:", e);
+        return false;
+      }
+    };
+
+    window.deleteExpenseFromCloud = async function(docId) {
+      if (!db || !currentUser) return false;
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'expenses', docId);
+        await deleteDoc(docRef);
+        return true;
+      } catch (e) {
+        console.error("Error deleting expense from cloud:", e);
+        return false;
+      }
+    };
+
+    window.addAttendanceToCloud = async function(attObj) {
+      if (!db || !currentUser) return false;
+      try {
+        const attRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
+        await addDoc(attRef, {
+          ...attObj,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+        return true;
+      } catch (e) {
+        console.error("Error adding attendance to cloud:", e);
+        return false;
+      }
+    };
+
+    window.updateAttendanceInCloud = async function(docId, attObj) {
+      if (!db || !currentUser) return false;
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', docId);
+        await updateDoc(docRef, {
+          ...attObj,
+          updatedBy: currentUser.uid,
+          updatedAt: serverTimestamp()
+        });
+        return true;
+      } catch (e) {
+        console.error("Error updating attendance in cloud:", e);
+        return false;
+      }
+    };
+
+    window.deleteAttendanceFromCloud = async function(docId) {
+      if (!db || !currentUser) return false;
+      try {
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', docId);
+        await deleteDoc(docRef);
+        return true;
+      } catch (e) {
+        console.error("Error deleting attendance from cloud:", e);
+        return false;
+      }
+    };
+
+    // Auto init auth on load
+    window.initCloudAuth();
+  </script>
+</head>
+<body class="min-h-screen text-slate-800 flex justify-center py-6 px-3 sm:px-6">
+
+  <!-- Main Application Container -->
+  <div class="w-full max-w-lg flex flex-col gap-4">
+    
+    <!-- TOP BRAND HEADER WITH CLOUD MODE TOGGLE -->
+    <header class="flex flex-col gap-2 pt-1 pb-1 px-1">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-[#FF6B00] text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+            <i data-lucide="building-2" class="w-6 h-6 stroke-[2.2]"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-extrabold text-[#0F172A] leading-snug tracking-tight">GURUBARA CONSTRUCTIONS</h1>
+            <p class="text-xs font-semibold text-slate-500">Daily Expense Register & Labor Wages</p>
+          </div>
+        </div>
+
+        <div id="userSyncBadge" class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span> Local Storage Only
+        </div>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <div class="grid grid-cols-2 gap-2 bg-slate-200/80 p-1.5 rounded-2xl">
+      <button 
+        id="tabBtnExpenses" 
+        onclick="switchTab('expenses')" 
+        class="tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all bg-white text-[#0F172A] shadow-sm">
+        <i data-lucide="receipt" class="w-4 h-4 text-[#FF6B00]"></i>
+        Daily Expenses
+      </button>
+      <button 
+        id="tabBtnAttendance" 
+        onclick="switchTab('attendance')" 
+        class="tab-btn py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all text-slate-600 hover:text-slate-900">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        Labor & Attendance
+      </button>
+    </div>
+
+    <!-- TAB 1: DAILY EXPENSES -->
+    <main id="tabExpenses" class="flex flex-col gap-4">
+      <!-- STATS CARDS -->
+      <section class="grid grid-cols-2 gap-3.5">
+        <div class="bg-white rounded-3xl p-4 border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <i data-lucide="trending-up" class="w-4 h-4 stroke-[2.5]"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-500 tracking-wider uppercase">TODAY</span>
+          </div>
+          <div class="text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight font-mono-num" id="todayAmount">₹0.00</div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-4 border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
+              <i data-lucide="calendar" class="w-4 h-4 stroke-[2.5]"></i>
+            </div>
+            <span class="text-xs font-bold text-slate-500 tracking-wider uppercase">THIS MONTH</span>
+          </div>
+          <div class="text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight font-mono-num" id="monthAmount">₹0.00</div>
+        </div>
+      </section>
+
+      <!-- ADD EXPENSE FORM -->
+      <section class="bg-white rounded-[28px] p-5 border border-slate-100 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.04)]">
+        <h2 class="text-base font-bold text-[#0F172A] flex items-center gap-1.5 mb-3.5">
+          <span class="text-[#FF6B00] text-xl font-bold">+</span> Add New Expense
+        </h2>
+
+        <form id="expenseForm" class="flex flex-col gap-3.5">
+          <div class="flex flex-col gap-1">
+            <label for="expenseTitle" class="text-xs font-bold text-slate-600">Expense Title</label>
+            <input type="text" id="expenseTitle" placeholder="e.g., Grocery, Petrol, Food..." required class="w-full px-4 py-2.5 bg-slate-100/80 rounded-2xl border border-transparent focus:border-[#FF6B00] focus:bg-white focus:outline-none text-slate-800 placeholder-slate-400 font-medium text-sm transition-all" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label for="expenseAmount" class="text-xs font-bold text-slate-600">Amount (₹)</label>
+            <input type="number" id="expenseAmount" step="0.01" min="0.01" placeholder="0.00" required class="w-full px-4 py-2.5 bg-slate-100/80 rounded-2xl border border-transparent focus:border-[#FF6B00] focus:bg-white focus:outline-none text-slate-900 placeholder-slate-400 font-semibold font-mono-num text-sm transition-all" />
+          </div>
+
+          <div class="flex flex-col gap-1.5 pt-1">
+            <label class="text-xs font-bold text-slate-600">Pay with (App direct launch):</label>
+            <div class="grid grid-cols-3 gap-2" id="paymentMethodContainer">
+              <button type="button" data-method="GPay" onclick="selectPaymentMethod('GPay')" class="payment-pill border-2 border-emerald-500 bg-[#57B863] text-white py-2 px-2 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all shadow-md active:scale-95">GPay</button>
+              <button type="button" data-method="Paytm" onclick="selectPaymentMethod('Paytm')" class="payment-pill opacity-60 border-2 border-transparent bg-[#63ABEC] text-white py-2 px-2 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all active:scale-95">Paytm</button>
+              <button type="button" data-method="Cash" onclick="selectPaymentMethod('Cash')" class="payment-pill opacity-60 border-2 border-transparent bg-[#FFAA5B] text-white py-2 px-2 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all active:scale-95">Cash</button>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full mt-2 py-3 bg-[#0F172A] hover:bg-slate-800 text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm">
+            <i data-lucide="plus-circle" class="w-4 h-4 text-[#FF6B00]"></i> Save Expense
+          </button>
+        </form>
+      </section>
+
+      <!-- RECENT EXPENSES LIST -->
+      <section class="flex flex-col gap-2.5">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">RECENT EXPENSES</h3>
+          <button id="exportBtn" class="px-3 py-1 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm hover:bg-slate-50 transition-all active:scale-95">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-600"></i> Export CSV
+          </button>
+        </div>
+
+        <div class="bg-white rounded-[28px] p-2 border border-slate-100 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.04)] min-h-[140px] flex flex-col justify-center">
+          <div id="expensesList" class="divide-y divide-slate-100"></div>
+          <div id="emptyState" class="py-8 text-center flex flex-col items-center justify-center gap-1.5">
+            <i data-lucide="receipt" class="w-8 h-8 text-slate-300 stroke-[1.5]"></i>
+            <p class="text-xs font-medium text-slate-400">No expenses recorded yet</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- TAB 2: LABOR ATTENDANCE & AUTOMATED WAGE CALCULATOR -->
+    <main id="tabAttendance" class="hidden flex-col gap-4">
+      <!-- ATTENDANCE STATS CARDS -->
+      <section class="grid grid-cols-3 gap-2 sm:gap-3">
+        <div class="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">TODAY LABORS</span>
+          <div class="text-lg font-bold text-[#0F172A] font-mono-num mt-1" id="statTodayLabors">0</div>
+        </div>
+        <div class="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">TODAY WAGES</span>
+          <div class="text-base sm:text-lg font-bold text-[#FF6B00] font-mono-num mt-1" id="statTodayWages">₹0</div>
+        </div>
+        <div class="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm flex flex-col justify-between">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">MONTH WAGES</span>
+          <div class="text-base sm:text-lg font-bold text-[#0F172A] font-mono-num mt-1" id="statMonthWages">₹0</div>
+        </div>
+      </section>
+
+      <!-- RATE CONFIGURATION SETTINGS -->
+      <section class="bg-slate-100/80 rounded-2xl p-3 border border-slate-200/60 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="settings" class="w-4 h-4 text-slate-600"></i>
+          <span class="text-xs font-bold text-slate-700">Daily Rates:</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1">
+            <span class="text-[11px] font-semibold text-slate-500">Mason:</span>
+            <input type="number" id="rateMason" value="1100" class="w-16 px-1.5 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center font-mono-num focus:border-[#FF6B00] focus:outline-none" />
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-[11px] font-semibold text-slate-500">Helper:</span>
+            <input type="number" id="rateHelper" value="900" class="w-16 px-1.5 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center font-mono-num focus:border-[#FF6B00] focus:outline-none" />
+          </div>
+        </div>
+      </section>
+
+      <!-- DAILY ATTENDANCE LOGGER FORM -->
+      <section class="bg-white rounded-[28px] p-5 border border-slate-100 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.04)]">
+        <div class="flex items-center justify-between mb-3.5">
+          <h2 id="attFormHeading" class="text-base font-bold text-[#0F172A] flex items-center gap-2">
+            <i data-lucide="user-check" class="w-5 h-5 text-[#FF6B00]"></i> Daily Attendance Entry
+          </h2>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="openSiteManagerModal()" class="text-xs font-bold text-[#FF6B00] bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1">
+              <i data-lucide="building-2" class="w-3.5 h-3.5"></i> Manage / Rename Sites
+            </button>
+            <button type="button" id="cancelEditAttBtn" onclick="resetAttendanceForm()" class="hidden text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i> Cancel Edit
+            </button>
+          </div>
+        </div>
+
+        <form id="attendanceForm" class="flex flex-col gap-3.5">
+          <input type="hidden" id="editingAttId" value="" />
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1">
+              <label for="attDate" class="text-xs font-bold text-slate-600">Date</label>
+              <input type="date" id="attDate" required class="w-full px-3 py-2 bg-slate-100/80 rounded-xl border border-transparent focus:border-[#FF6B00] focus:bg-white text-xs sm:text-sm font-semibold text-slate-800" />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label for="attSite" class="text-xs font-bold text-slate-600">Site Name</label>
+              <div class="flex flex-col gap-1">
+                <select id="attSite" onchange="toggleCustomSiteInput(this.value)" class="w-full px-3 py-2 bg-slate-100/80 rounded-xl border border-transparent focus:border-[#FF6B00] focus:bg-white text-xs sm:text-sm font-semibold text-slate-800">
+                  <!-- Populated dynamically by populateSiteDropdowns() -->
+                </select>
+                <input type="text" id="attCustomSite" placeholder="Type new site name..." class="hidden w-full px-3 py-2 bg-slate-100/80 rounded-xl border border-transparent focus:border-[#FF6B00] focus:bg-white text-xs sm:text-sm font-semibold text-slate-800 mt-1" />
+              </div>
+            </div>
+          </div>
+
+          <!-- LABOR COUNTS -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1 bg-orange-50/50 p-3 rounded-2xl border border-orange-100">
+              <span class="text-xs font-extrabold text-[#FF6B00]">Masons (₹<span id="labelRateMason">1100</span>/day)</span>
+              <input type="number" id="countMason" step="0.5" min="0" value="0" placeholder="0" class="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-lg font-bold font-mono-num text-slate-900 focus:border-[#FF6B00] focus:outline-none" />
+            </div>
+
+            <div class="flex flex-col gap-1 bg-blue-50/50 p-3 rounded-2xl border border-blue-100">
+              <span class="text-xs font-extrabold text-blue-600">Helpers (₹<span id="labelRateHelper">900</span>/day)</span>
+              <input type="number" id="countHelper" step="0.5" min="0" value="0" placeholder="0" class="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-lg font-bold font-mono-num text-slate-900 focus:border-[#FF6B00] focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label for="advancePaid" class="text-xs font-bold text-slate-600">Advance / Paid Amount on Site (₹)</label>
+            <input type="number" id="advancePaid" step="1" min="0" value="0" placeholder="0" class="w-full px-3 py-2.5 bg-slate-100/80 rounded-xl border border-transparent focus:border-[#FF6B00] focus:bg-white text-sm font-bold font-mono-num text-slate-800" />
+          </div>
+
+          <!-- AUTOMATED REAL-TIME CALCULATION SUMMARY CARD -->
+          <div class="bg-slate-900 text-white rounded-2xl p-3.5 flex flex-col gap-2 shadow-sm">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 pb-1 flex justify-between">
+              <span>Automatic Wage Breakdown</span>
+              <span id="calcTotalLaborsCount" class="text-orange-400">0 Labors</span>
+            </div>
+            
+            <div class="grid grid-cols-2 text-xs gap-y-1 text-slate-300">
+              <div>Mason Wage: <span id="calcMasonWage" class="font-bold text-white font-mono-num">₹0</span></div>
+              <div>Helper Wage: <span id="calcHelperWage" class="font-bold text-white font-mono-num">₹0</span></div>
+              <div>Gross Total: <span id="calcGrossWage" class="font-bold text-white font-mono-num">₹0</span></div>
+              <div>Advance Paid: <span id="calcAdvance" class="font-bold text-red-400 font-mono-num">₹0</span></div>
+            </div>
+
+            <div class="pt-1.5 border-t border-slate-800 flex justify-between items-baseline">
+              <span class="text-xs font-bold text-slate-300">Net Payable Balance:</span>
+              <span id="calcNetPayable" class="text-lg font-extrabold text-[#FF6B00] font-mono-num">₹0</span>
+            </div>
+          </div>
+
+          <button type="submit" id="submitAttendanceBtn" class="w-full py-3 bg-[#FF6B00] hover:bg-[#E56000] text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm">
+            <i data-lucide="check-circle" class="w-4 h-4" id="submitAttBtnIcon"></i> <span id="submitAttBtnText">Save Daily Attendance</span>
+          </button>
+        </form>
+      </section>
+
+      <!-- ATTENDANCE HISTORY LEDGER -->
+      <section class="flex flex-col gap-2.5">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">ATTENDANCE LEDGER</h3>
+          <button id="exportAttendanceBtn" class="px-3 py-1 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm hover:bg-slate-50 transition-all active:scale-95">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-orange-600"></i> Export CSV
+          </button>
+        </div>
+
+        <div class="bg-white rounded-[28px] p-2 border border-slate-100 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.04)] min-h-[140px] flex flex-col justify-center">
+          <div id="attendanceList" class="divide-y divide-slate-100"></div>
+          <div id="emptyAttendanceState" class="py-8 text-center flex flex-col items-center justify-center gap-1.5">
+            <i data-lucide="users" class="w-8 h-8 text-slate-300 stroke-[1.5]"></i>
+            <p class="text-xs font-medium text-slate-400">No attendance entries recorded yet</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <!-- SITE MANAGER MODAL -->
+  <div id="siteManagerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl w-full max-w-md p-5 border border-slate-100 shadow-2xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-orange-100 text-[#FF6B00] flex items-center justify-center font-bold">
+            <i data-lucide="building-2" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-sm font-extrabold text-[#0F172A]">Manage & Rename Sites</h3>
+        </div>
+        <button onclick="closeSiteManagerModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500 font-medium">Click the edit button next to any site below to rename it globally across all existing attendance ledger entries.</p>
+
+      <!-- ADD NEW SITE INLINE -->
+      <form id="addSiteForm" onsubmit="handleAddNewSite(event)" class="flex items-center gap-2">
+        <input type="text" id="newSiteInput" placeholder="Add new site name..." required class="flex-1 px-3 py-2 bg-slate-100/80 rounded-xl border border-transparent focus:border-[#FF6B00] focus:bg-white text-xs font-semibold text-slate-800" />
+        <button type="submit" class="px-3 py-2 bg-[#FF6B00] hover:bg-[#E56000] text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1 shadow-sm">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
+        </button>
+      </form>
+
+      <!-- SITES LIST -->
+      <div id="masterSitesList" class="divide-y divide-slate-100 max-h-60 overflow-y-auto pr-1"></div>
+
+      <div class="pt-2 border-t border-slate-100 flex justify-end">
+        <button onclick="closeSiteManagerModal()" class="px-4 py-2 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global Navigation & Event Handlers attached early to window
+    // Initial Seed Data for Local Storage Mode
+    window.expensesData = [];
+    window.attendanceData = [];
+    window.masterSites = [
+      "Keezhpadapai Site",
+      "Minjur Site",
+      "Periyapalayam Site",
+      "Putlur Site",
+      "Main Project Site"
+    ];
+    let selectedMethod = 'GPay';
+
+    function loadLocalData() {
+      try {
+        window.expensesData = JSON.parse(localStorage.getItem('gurubara_expenses') || '[]');
+        window.attendanceData = JSON.parse(localStorage.getItem('gurubara_labor') || '[]');
+        const storedSites = localStorage.getItem('gurubara_sites');
+        if (storedSites) {
+          window.masterSites = JSON.parse(storedSites);
+        }
+      } catch (e) {
+        window.expensesData = [];
+        window.attendanceData = [];
+      }
+    }
+
+    function saveLocalExpenses() {
+      localStorage.setItem('gurubara_expenses', JSON.stringify(window.expensesData));
+    }
+
+    function saveLocalAttendance() {
+      localStorage.setItem('gurubara_labor', JSON.stringify(window.attendanceData));
+    }
+
+    function saveLocalSites() {
+      localStorage.setItem('gurubara_sites', JSON.stringify(window.masterSites));
+    }
+
+    window.populateSiteDropdowns = function() {
+      const select = document.getElementById('attSite');
+      if (!select) return;
+
+      const currentVal = select.value;
+      select.innerHTML = '';
+
+      window.masterSites.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        select.appendChild(opt);
+      });
+
+      const customOpt = document.createElement('option');
+      customOpt.value = 'CUSTOM';
+      customOpt.textContent = '+ Enter Custom Site Name...';
+      select.appendChild(customOpt);
+
+      if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+        select.value = currentVal;
+      }
+    };
+
+    window.openSiteManagerModal = function() {
+      window.renderMasterSitesList();
+      document.getElementById('siteManagerModal').classList.remove('hidden');
+      if (window.lucide) lucide.createIcons();
+    };
+
+    window.closeSiteManagerModal = function() {
+      document.getElementById('siteManagerModal').classList.add('hidden');
+    };
+
+    window.renderMasterSitesList = function() {
+      const container = document.getElementById('masterSitesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      window.masterSites.forEach((siteName, idx) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'py-2 px-1 flex items-center justify-between gap-2';
+        itemEl.innerHTML = `
+          <span class="text-xs font-bold text-slate-800" id="siteNameLabel_${idx}">${escapeHtml(siteName)}</span>
+          <div class="flex items-center gap-1">
+            <button onclick="promptRenameSite('${escapeHtml(siteName)}')" class="text-xs font-bold text-slate-600 hover:text-[#FF6B00] px-2 py-1 bg-slate-100 hover:bg-orange-50 rounded-lg transition-colors flex items-center gap-1">
+              <i data-lucide="pencil" class="w-3 h-3"></i> Rename
+            </button>
+            <button onclick="deleteMasterSite('${escapeHtml(siteName)}')" class="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemEl);
+      });
+
+      if (window.lucide) lucide.createIcons();
+    };
+
+    window.handleAddNewSite = function(e) {
+      e.preventDefault();
+      const input = document.getElementById('newSiteInput');
+      const val = input.value.trim();
+      if (!val) return;
+
+      if (!window.masterSites.includes(val)) {
+        window.masterSites.push(val);
+        saveLocalSites();
+        window.populateSiteDropdowns();
+        window.renderMasterSitesList();
+      }
+      input.value = '';
+    };
+
+    window.promptRenameSite = async function(oldName) {
+      const newName = prompt(`Rename site "${oldName}" to:`, oldName);
+      if (!newName || newName.trim() === '' || newName.trim() === oldName) return;
+
+      const trimmed = newName.trim();
+
+      // Update in Master Sites list
+      const index = window.masterSites.indexOf(oldName);
+      if (index !== -1) {
+        window.masterSites[index] = trimmed;
+      } else {
+        window.masterSites.push(trimmed);
+      }
+      saveLocalSites();
+
+      // Batch update across all local attendance ledger records
+      (window.attendanceData || []).forEach(att => {
+        if (att.site === oldName) {
+          att.site = trimmed;
+          if (window.activeDataMode === 'cloud') {
+            window.updateAttendanceInCloud(att.id, { site: trimmed });
+          }
+        }
+      });
+
+      if (window.activeDataMode !== 'cloud') {
+        saveLocalAttendance();
+      }
+
+      window.populateSiteDropdowns();
+      window.renderMasterSitesList();
+      window.renderAttendanceList();
+    };
+
+    window.deleteMasterSite = function(siteName) {
+      window.masterSites = window.masterSites.filter(s => s !== siteName);
+      saveLocalSites();
+      window.populateSiteDropdowns();
+      window.renderMasterSitesList();
+    };
+
+    window.updateExpenseTotals = function() {
+      const now = new Date();
+      let todayTotal = 0;
+      let monthTotal = 0;
+
+      (window.expensesData || []).forEach(item => {
+        const d = new Date(item.date);
+        if (d.toDateString() === now.toDateString()) {
+          todayTotal += Number(item.amount) || 0;
+        }
+        if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+          monthTotal += Number(item.amount) || 0;
+        }
+      });
+
+      document.getElementById('todayAmount').innerText = formatCurrency(todayTotal);
+      document.getElementById('monthAmount').innerText = formatCurrency(monthTotal);
+    };
+
+    window.renderExpenseList = function() {
+      const container = document.getElementById('expensesList');
+      const emptyState = document.getElementById('emptyState');
+      container.innerHTML = '';
+
+      const list = window.expensesData || [];
+      if (list.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      list.forEach(item => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'p-3 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors';
+        const methodColor = item.method === 'GPay' ? 'bg-emerald-100 text-emerald-700' : (item.method === 'Paytm' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700');
+
+        itemEl.innerHTML = `
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-bold text-slate-900">${escapeHtml(item.title)}</span>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold ${methodColor}">${escapeHtml(item.method || 'GPay')}</span>
+              <span class="text-[10px] font-semibold text-slate-400">${new Date(item.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-[#0F172A] font-mono-num">${formatCurrency(item.amount)}</span>
+            <button onclick="deleteExpenseItem('${item.id}')" class="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemEl);
+      });
+
+      if (window.lucide) lucide.createIcons();
+    };
+
+    document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('expenseTitle').value.trim();
+      const amount = parseFloat(document.getElementById('expenseAmount').value);
+
+      if (!title || isNaN(amount) || amount <= 0) return;
+
+      const newExpense = {
+        title,
+        amount,
+        method: selectedMethod,
+        date: new Date().toISOString()
+      };
+
+      if (window.activeDataMode === 'cloud') {
+        await window.addExpenseToCloud(newExpense);
+      } else {
+        newExpense.id = Date.now().toString();
+        window.expensesData.unshift(newExpense);
+        saveLocalExpenses();
+        window.updateExpenseTotals();
+        window.renderExpenseList();
+      }
+
+      document.getElementById('expenseTitle').value = '';
+      document.getElementById('expenseAmount').value = '';
+    });
+
+    window.deleteExpenseItem = async function(id) {
+      if (window.activeDataMode === 'cloud') {
+        await window.deleteExpenseFromCloud(id);
+      } else {
+        window.expensesData = window.expensesData.filter(e => e.id !== id);
+        saveLocalExpenses();
+        window.updateExpenseTotals();
+        window.renderExpenseList();
+      }
+    };
+
+    // PAYMENT METHOD TOGGLE & APP LAUNCH HANDLER
+    window.selectPaymentMethod = function(method) {
+      selectedMethod = method;
+      const pills = document.querySelectorAll('.payment-pill');
+      pills.forEach(pill => {
+        const m = pill.getAttribute('data-method');
+        if (m === method) {
+          pill.classList.remove('opacity-60', 'border-transparent');
+          pill.classList.add('shadow-md');
+          if (m === 'GPay') pill.classList.add('border-emerald-500');
+          if (m === 'Paytm') pill.classList.add('border-blue-400');
+          if (m === 'Cash') pill.classList.add('border-amber-400');
+        } else {
+          pill.classList.add('opacity-60', 'border-transparent');
+          pill.classList.remove('shadow-md', 'border-emerald-500', 'border-blue-400', 'border-amber-400');
+        }
+      });
+
+      // LAUNCH GPAY OR PAYTM MOBILE APP WHEN CLICKED
+      const amountVal = parseFloat(document.getElementById('expenseAmount').value) || 0;
+      const titleVal = document.getElementById('expenseTitle').value.trim() || 'Site Expense';
+      const note = encodeURIComponent(`Gurubara - ${titleVal}`);
+
+      if (method === 'GPay') {
+        const upiUrl = `upi://pay?pa=&pn=Gurubara%20Constructions&am=${amountVal}&cu=INR&tn=${note}`;
+        window.location.href = upiUrl;
+      } else if (method === 'Paytm') {
+        const upiUrl = `upi://pay?pa=&pn=Gurubara%20Constructions&am=${amountVal}&cu=INR&tn=${note}`;
+        window.location.href = upiUrl;
+      }
+    };
+
+    // ATTENDANCE & AUTOMATED WAGE CALCULATIONS
+    function calculateLiveWage() {
+      const masonRate = parseFloat(document.getElementById('rateMason').value) || 1100;
+      const helperRate = parseFloat(document.getElementById('rateHelper').value) || 900;
+      const countMason = parseFloat(document.getElementById('countMason').value) || 0;
+      const countHelper = parseFloat(document.getElementById('countHelper').value) || 0;
+      const advance = parseFloat(document.getElementById('advancePaid').value) || 0;
+
+      document.getElementById('labelRateMason').innerText = masonRate;
+      document.getElementById('labelRateHelper').innerText = helperRate;
+
+      const masonWage = countMason * masonRate;
+      const helperWage = countHelper * helperRate;
+      const gross = masonWage + helperWage;
+      const netPayable = gross - advance;
+
+      document.getElementById('calcTotalLaborsCount').innerText = `${countMason + countHelper} Labors`;
+      document.getElementById('calcMasonWage').innerText = formatCurrency(masonWage);
+      document.getElementById('calcHelperWage').innerText = formatCurrency(helperWage);
+      document.getElementById('calcGrossWage').innerText = formatCurrency(gross);
+      document.getElementById('calcAdvance').innerText = formatCurrency(advance);
+      document.getElementById('calcNetPayable').innerText = formatCurrency(netPayable);
+    }
+
+    ['rateMason', 'rateHelper', 'countMason', 'countHelper', 'advancePaid'].forEach(id => {
+      document.getElementById(id).addEventListener('input', calculateLiveWage);
+    });
+
+    window.updateAttendanceTotals = function() {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+
+      let todayLabors = 0;
+      let todayWages = 0;
+      let monthWages = 0;
+
+      (window.attendanceData || []).forEach(att => {
+        const gross = (att.masons * att.masonRate) + (att.helpers * att.helperRate);
+        const attDate = new Date(att.date);
+
+        if (att.date === todayStr) {
+          todayLabors += (Number(att.masons) + Number(att.helpers));
+          todayWages += gross;
+        }
+
+        if (attDate.getMonth() === currentMonth && attDate.getFullYear() === currentYear) {
+          monthWages += gross;
+        }
+      });
+
+      document.getElementById('statTodayLabors').innerText = todayLabors;
+      document.getElementById('statTodayWages').innerText = formatCurrency(todayWages);
+      document.getElementById('statMonthWages').innerText = formatCurrency(monthWages);
+    };
+
+    window.renderAttendanceList = function() {
+      const container = document.getElementById('attendanceList');
+      const emptyState = document.getElementById('emptyAttendanceState');
+      container.innerHTML = '';
+
+      const list = window.attendanceData || [];
+      if (list.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      const sorted = [...list].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      sorted.forEach(item => {
+        const gross = (item.masons * item.masonRate) + (item.helpers * item.helperRate);
+        const net = gross - item.advance;
+        const itemEl = document.createElement('div');
+        itemEl.className = 'p-3 flex items-center justify-between hover:bg-slate-50 rounded-2xl transition-colors';
+
+        itemEl.innerHTML = `
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-bold text-slate-900">${escapeHtml(item.site)}</span>
+            <span class="text-[10px] font-semibold text-slate-400">${item.date}</span>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <span class="px-1.5 py-0.5 bg-orange-100 text-[#FF6B00] rounded-md text-[10px] font-bold">${item.masons} Masons</span>
+              <span class="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-md text-[10px] font-bold">${item.helpers} Helpers</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex flex-col items-end">
+              <span class="text-xs font-bold text-[#0F172A] font-mono-num">${formatCurrency(net)}</span>
+              <span class="text-[10px] text-slate-400 font-medium">Gross: ${formatCurrency(gross)}</span>
+            </div>
+            <button onclick="editAttendanceItem('${item.id}')" title="Edit Entry" class="text-slate-400 hover:text-[#FF6B00] p-1 rounded-lg transition-colors">
+              <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="deleteAttendanceItem('${item.id}')" title="Delete Entry" class="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(itemEl);
+      });
+
+      if (window.lucide) lucide.createIcons();
+    };
+
+    window.editAttendanceItem = function(id) {
+      const item = (window.attendanceData || []).find(a => a.id === id);
+      if (!item) return;
+
+      document.getElementById('editingAttId').value = item.id;
+      document.getElementById('attDate').value = item.date;
+      
+      const siteSelect = document.getElementById('attSite');
+      const customInput = document.getElementById('attCustomSite');
+      
+      // Check if site is in preset options
+      const hasOption = Array.from(siteSelect.options).some(opt => opt.value === item.site);
+      if (hasOption) {
+        siteSelect.value = item.site;
+        customInput.classList.add('hidden');
+        customInput.value = '';
+      } else {
+        siteSelect.value = 'CUSTOM';
+        customInput.classList.remove('hidden');
+        customInput.value = item.site;
+      }
+
+      document.getElementById('countMason').value = item.masons;
+      document.getElementById('countHelper').value = item.helpers;
+      document.getElementById('rateMason').value = item.masonRate || 1100;
+      document.getElementById('rateHelper').value = item.helperRate || 900;
+      document.getElementById('advancePaid').value = item.advance || 0;
+
+      // Update Form UI Header & Submit Button
+      document.getElementById('attFormHeading').innerHTML = `<i data-lucide="pencil-line" class="w-5 h-5 text-[#FF6B00]"></i> Edit Attendance Entry`;
+      document.getElementById('cancelEditAttBtn').classList.remove('hidden');
+      document.getElementById('submitAttBtnText').innerText = "Update Attendance Entry";
+      const btn = document.getElementById('submitAttendanceBtn');
+      btn.className = "w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm";
+      
+      calculateLiveWage();
+      if (window.lucide) lucide.createIcons();
+
+      // Scroll smoothly up to the form
+      document.getElementById('attendanceForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    window.resetAttendanceForm = function() {
+      document.getElementById('editingAttId').value = "";
+      document.getElementById('countMason').value = '0';
+      document.getElementById('countHelper').value = '0';
+      document.getElementById('advancePaid').value = '0';
+      document.getElementById('attCustomSite').value = '';
+      document.getElementById('attCustomSite').classList.add('hidden');
+      document.getElementById('attSite').selectedIndex = 0;
+
+      document.getElementById('attFormHeading').innerHTML = `<i data-lucide="user-check" class="w-5 h-5 text-[#FF6B00]"></i> Daily Attendance Entry`;
+      document.getElementById('cancelEditAttBtn').classList.add('hidden');
+      document.getElementById('submitAttBtnText').innerText = "Save Daily Attendance";
+      const btn = document.getElementById('submitAttendanceBtn');
+      btn.className = "w-full py-3 bg-[#FF6B00] hover:bg-[#E56000] text-white font-bold rounded-2xl transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 text-sm";
+      
+      calculateLiveWage();
+      if (window.lucide) lucide.createIcons();
+    };
+
+    document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const editingId = document.getElementById('editingAttId').value;
+      const date = document.getElementById('attDate').value;
+      
+      let site = document.getElementById('attSite').value;
+      if (site === 'CUSTOM') {
+        const customSiteVal = document.getElementById('attCustomSite').value.trim();
+        site = customSiteVal || 'Custom Site';
+      }
+
+      const masons = parseFloat(document.getElementById('countMason').value) || 0;
+      const helpers = parseFloat(document.getElementById('countHelper').value) || 0;
+      const masonRate = parseFloat(document.getElementById('rateMason').value) || 1100;
+      const helperRate = parseFloat(document.getElementById('rateHelper').value) || 900;
+      const advance = parseFloat(document.getElementById('advancePaid').value) || 0;
+
+      if (masons <= 0 && helpers <= 0) {
+        return;
+      }
+
+      const attendanceObj = {
+        date,
+        site,
+        masons,
+        helpers,
+        masonRate,
+        helperRate,
+        advance
+      };
+
+      if (editingId) {
+        // Edit existing entry
+        if (window.activeDataMode === 'cloud') {
+          await window.updateAttendanceInCloud(editingId, attendanceObj);
+        } else {
+          const idx = window.attendanceData.findIndex(a => a.id === editingId);
+          if (idx !== -1) {
+            window.attendanceData[idx] = { id: editingId, ...attendanceObj };
+            saveLocalAttendance();
+            window.updateAttendanceTotals();
+            window.renderAttendanceList();
+          }
+        }
+      } else {
+        // Add new entry
+        if (window.activeDataMode === 'cloud') {
+          await window.addAttendanceToCloud(attendanceObj);
+        } else {
+          attendanceObj.id = Date.now().toString();
+          window.attendanceData.unshift(attendanceObj);
+          saveLocalAttendance();
+          window.updateAttendanceTotals();
+          window.renderAttendanceList();
+        }
+      }
+
+      resetAttendanceForm();
+    });
+
+    window.deleteAttendanceItem = async function(id) {
+      if (document.getElementById('editingAttId').value === id) {
+        resetAttendanceForm();
+      }
+      if (window.activeDataMode === 'cloud') {
+        await window.deleteAttendanceFromCloud(id);
+      } else {
+        window.attendanceData = window.attendanceData.filter(att => att.id !== id);
+        saveLocalAttendance();
+        window.updateAttendanceTotals();
+        window.renderAttendanceList();
+      }
+    };
+
+    // EXPORTS
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const list = window.expensesData || [];
+      if (list.length === 0) return;
+      let csv = "ID,Date,Title,Amount (INR),Payment Method\n";
+      list.forEach(e => csv += `${e.id},"${new Date(e.date).toLocaleString('en-IN')}","${e.title.replace(/"/g, '""')}",${e.amount},${e.method}\n`);
+      downloadCSV(csv, `Expenses_${new Date().toISOString().slice(0,10)}.csv`);
+    });
+
+    document.getElementById('exportAttendanceBtn').addEventListener('click', () => {
+      const list = window.attendanceData || [];
+      if (list.length === 0) return;
+      let csv = "ID,Date,Site Name,Masons Count,Mason Daily Rate,Helpers Count,Helper Daily Rate,Gross Wages,Advance Paid,Net Payable\n";
+      list.forEach(a => {
+        const gross = (a.masons * a.masonRate) + (a.helpers * a.helperRate);
+        const net = gross - a.advance;
+        csv += `${a.id},"${a.date}","${a.site}",${a.masons},${a.masonRate},${a.helpers},${a.helperRate},${gross},${a.advance},${net}\n`;
+      });
+      downloadCSV(csv, `Labor_Attendance_${new Date().toISOString().slice(0,10)}.csv`);
+    });
+
+    function downloadCSV(csvText, fileName) {
+      const link = document.createElement("a");
+      link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + csvText));
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Payment Method Selection Pills
+    const paymentPills = document.querySelectorAll('.payment-pill');
+    paymentPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        paymentPills.forEach(p => p.classList.remove('active', 'border-emerald-500', 'border-blue-400', 'border-amber-400'));
+        pill.classList.add('active');
+        selectedMethod = pill.getAttribute('data-method');
+        if (selectedMethod === 'GPay') pill.classList.add('border-emerald-500');
+        if (selectedMethod === 'Paytm') pill.classList.add('border-blue-400');
+        if (selectedMethod === 'Cash') pill.classList.add('border-amber-400');
+      });
+    });
+
+    // INIT APP
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('attDate').value = new Date().toISOString().slice(0, 10);
+      loadLocalData();
+      window.populateSiteDropdowns();
+      window.updateExpenseTotals();
+      window.renderExpenseList();
+      calculateLiveWage();
+      window.updateAttendanceTotals();
+      window.renderAttendanceList();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
